@@ -200,6 +200,13 @@ int dumpToken() {
     *  Write your code here.
     *
     */
+  Token t;
+  while((t = lexer.getNextToken()) != tok_eof){
+    // printf("%d ", t);
+    // printf("\n");
+  }
+
+  lexer.traverse();
   return 0;
 }
 

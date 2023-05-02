@@ -11,6 +11,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <cstring>
 
 namespace pony {
 
@@ -41,6 +42,15 @@ enum Token : int {
   tok_number = -6,
 };
 
+enum Error{
+  // digit at wrong location
+  identifier_err_1 = 0,
+  // invalid char
+  identifier_err_2,
+  num_err,
+  no_err
+};
+
 /// The Lexer is an abstract base class providing all the facilities that the
 /// Parser expects. It goes through the stream one token at a time and keeps
 /// track of the location in the file for debugging purpose.
@@ -65,6 +75,7 @@ public:
   /// Move to the next token in the stream, asserting on the current token
   /// matching the expectation.
   void consume(Token tok) {
+    // printf("to consume %d\t%c\tcurrent %d\t%d\n", tok, static_cast<char>(tok), curTok, curTok);
     assert(tok == curTok && "consume Token mismatch expectation");
     getNextToken();
   }
@@ -90,6 +101,30 @@ public:
   // Return the current column in the file.
   int getCol() { return curCol; }
 
+  // if there is no error, just output all tokens , otherwise will output the errors
+  void traverse(){
+    fflush(stdout);
+    if(error.size() != 0){
+      for(auto& t : error){
+        if(t.err == num_err){
+          printf("Token error[Number error] (line %d, col %d):invalid digit input \"%s\"\n", t.line, t.col, t.content.c_str());
+        }
+        else if(t.err == identifier_err_2){
+          printf("Token error[Identifier error] (line %d, col %d):identifier should contain only digits , alpha and _ \"%s\"\n", t.line, t.col, t.content.c_str());
+        }
+        else{
+          printf("Token error[Identifier error] (line %d, col %d):An identifier cannot begin with digits \"%s\"\n", t.line, t.col, t.content.c_str());
+        }
+      }
+    }
+    else{
+      for(auto& t : success){
+        printf("%s ", t.content.c_str());
+      }
+      printf("\n");
+    }
+  }
+
 private:
   /// Delegate to a derived class fetching the next line. Returns an empty
   /// string to signal end of file (EOF). Lines are expected to always finish
@@ -112,6 +147,25 @@ private:
      *  Write your code here.
      *
      */
+    // if the curLineBuffer is empty , no data read in, meet EOF
+    if(curLineBuffer.empty()){
+      return EOF;
+    }
+
+    char ch = curLineBuffer.front();
+    curCol++;
+
+    // deal with the '\n' case
+    if(ch == '\n'){
+      curLineNum++;
+      curLineBuffer = readNextLine();
+      curCol = 0;
+    }
+    else 
+      curLineBuffer = curLineBuffer.drop_front(1);
+    if(ch != EOF)
+    fflush(stdout);
+    return ch;
   }
 
   ///  Return the next token from standard input.
@@ -140,16 +194,149 @@ private:
      *  Write your code here.
      *
      */
+    
+    char beg = lastChar;
+    Error err = no_err;
+    token t{};
+    Token thisChar = Token(lastChar);
+    std::string str{};
 
+    // return case
+    if(isalpha(lastChar) && lastChar == 'r'){
+      int i = 0;
+      std::string ret{"return"};
+      do{
+        i++;
+        lastChar = Token(getNextChar());
+      } while(i < 6 && isalpha(lastChar) && lastChar == ret[i]);
+
+      // the case is that an identifier begin with return, so we have to keep scanning
+      // goto identifier 
+      if(lastChar != ' ' && lastChar != ';'){
+        str += "return";
+        goto identifier;
+      }
+      t.col = lastLocation.col;
+      t.line = lastLocation.line;
+      t.content = std::string("return");
+      success.push_back(t);
+      return tok_return;
+    }
+
+    // deal with the var case
+    if(isalpha(lastChar) && lastChar == 'v'){
+      int i = 0;
+      std::string var{"var"};
+      do{
+        i++;
+        // printf("%c\n", lastChar);
+        str += lastChar;
+        lastChar = Token(getNextChar());
+      } while(i < 3 && isalpha(lastChar) && lastChar == var[i]);
+
+      // var
+      // like return , an identifier begin with var
+      // if(i != 3){
+      //   assert(i < 3);
+        
+      // }
+      if((i == 3 && lastChar != ' ') || i != 3){
+        // str += "var";
+        goto identifier;
+      }
+      t.col = lastLocation.col;
+      t.line = lastLocation.line;
+      t.content = std::string("var");
+      success.push_back(t);
+      return tok_var;
+    }
+
+    // deal with def case
+    if(isalpha(lastChar) && lastChar == 'd'){
+      int i = 0;
+      std::string def{"def"};
+      do{
+        i++;
+        lastChar = Token(getNextChar());
+      } while(i < 3 && isalpha(lastChar) && lastChar == def[i]);
+      if((i == 3 && lastChar!= ' ') || i != 3){
+        // printf("get here\n");
+        // str += "def";
+        goto identifier;
+      }
+      t.col = lastLocation.col;
+      t.line = lastLocation.line;
+      t.content = std::string("def");
+      success.push_back(t);
+      return tok_def;
+    }
+
+    // only when beg is _ or alpha , the loop will begin
+    // otherwise it will conflict with the number detection
+    identifier:
+    if(isalpha(beg) || beg == '_'){
+      // to record whether digit has appeared in the id
+      bool flag = true;
+      printf("before\n");
+      while(isalpha(lastChar) || isdigit(lastChar) || lastChar == '_'){
+        if(isdigit(lastChar)){
+          flag = false;
+        }
+        // if a digit mix in the middle of a id
+        if(!flag && isalpha(lastChar)){
+          err = identifier_err_2;
+        }
+        str += lastChar;
+        printf("%s\n", str.c_str());
+        lastChar = Token(getNextChar());
+      }
+      printf("after\n");
+      t.col = lastLocation.col;
+      t.line = lastLocation.line;
+      t.content = str;
+      identifierStr = str;
+      // if some error occurs , goto err to deal with it
+      if(err == no_err)
+        success.push_back(t);
+      else
+        goto err;
+      return tok_identifier;
+    }
+    
     //TODO: 3. 改进识别数字的方法，使编译器可以识别并在终端报告非法数字，非法表示包括：9.9.9，9..9，.123等。
     if (isdigit(lastChar) || lastChar == '.') {
       std::string numStr;
+      char* endptr = nullptr;
       do {
         numStr += lastChar;
         lastChar = Token(getNextChar());
       } while (isdigit(lastChar) || lastChar == '.');
 
-      numVal = strtod(numStr.c_str(), nullptr);
+      // if a num end with a char
+      if(isalpha(lastChar) || lastChar == '_'){
+        // digit before id
+        // printf("\nerror\n");
+        err = identifier_err_1;
+        while((lastChar = Token(getNextChar())) != ' '){
+          numStr += lastChar;
+        }
+        goto err;
+      }
+
+      numVal = strtod(numStr.c_str(), &endptr);
+
+      // if the strtod fail to reach the end, some error occurs
+      if(strcmp(endptr, "") != 0 || (numStr.length() > 0 && numStr[0] == '.')){
+        // printf("\nerror2\n");
+        t.err = num_err;
+        t.content = numStr;
+        goto err;
+      }
+
+      t.col = lastLocation.col;
+      t.line = lastLocation.line;
+      t.content = numStr;
+      success.push_back(t);
       return tok_number;
     }
 
@@ -157,6 +344,7 @@ private:
       // Comment until end of line.
       do {
         lastChar = Token(getNextChar());
+        //printf("%d ", lastChar);
       } while (lastChar != EOF && lastChar != '\n' && lastChar != '\r');
 
       if (lastChar != EOF)
@@ -164,13 +352,29 @@ private:
     }
 
     // Check for end of file.  Don't eat the EOF.
-    if (lastChar == EOF)
+    if (lastChar == EOF){
       return tok_eof;
+    }
 
     // Otherwise, just return the character as its ascii value.
-    Token thisChar = Token(lastChar);
+    thisChar = Token(lastChar);
     lastChar = Token(getNextChar());
+
+    // if(isalpha(lastChar))
+
+    t.col = lastLocation.col;
+    t.line = lastLocation.line;
+    t.content += thisChar;
+    success.push_back(t);
+
     return thisChar;
+
+    // deal with error
+    err:
+    t.line = lastLocation.line;
+    t.col = lastLocation.col;
+    // t.err = err;
+    error.push_back(t);
   }
 
   /// The last token read from the input.
@@ -198,6 +402,15 @@ private:
 
   /// Buffer supplied by the derived class on calls to `readNextLine()`
   llvm::StringRef curLineBuffer = "\n";
+
+  struct token{
+    unsigned col = 0, line = 0;
+    Error err = no_err;
+    std::string content;
+  };
+
+  std::vector<token> success;
+  std::vector<token> error;
 
 };
 

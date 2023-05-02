@@ -60,6 +60,7 @@ private:
   ///
   /// definition ::= prototype block
   std::unique_ptr<FunctionAST> parseDefinition() {
+    printf("parseDefinition\n");
     auto proto = parsePrototype();
     if (!proto)
       return nullptr;
@@ -73,6 +74,7 @@ private:
   //        prototype ::= def id '(' decl_list ')'   
   //        decl_list ::= identifier | identifier, decl_list                    
   std::unique_ptr<PrototypeAST> parsePrototype() {
+    printf("parsePrototype\n");
     auto loc = lexer.getLastLocation();
 
     if (lexer.getCurToken() != tok_def)
@@ -123,6 +125,7 @@ private:
   /// expression_list ::= block_expr ; expression_list
   /// block_expr ::= decl | "return" | expr
   std::unique_ptr<ExprASTList> parseBlock() {
+    printf("parseBlock\n");
     if (lexer.getCurToken() != '{')
       return parseError<ExprASTList>("{", "to begin block");
     lexer.consume(Token('{'));
@@ -179,6 +182,7 @@ private:
   //    (3) var a [2][3] = [1, 2, 3, 4, 5, 6];
   // Some functions may be useful:  getLastLocation(); getNextToken();
   std::unique_ptr<VarDeclExprAST> parseDeclaration() {
+    printf("parseDeclaration\n");
     auto loc = lexer.getLastLocation();
     std::string id;
     // TODO: check to see if this is a 'var' declaration 
@@ -188,7 +192,18 @@ private:
      *  Write your code here.
      *
      */
-
+    if(lexer.getCurToken() == 'v'){
+      if(lexer.getNextToken() == 'a' && lexer.getNextToken() == 'r'){
+        // lexer.consume(Token('v'));
+        // lexer.consume(Token('a'));
+        // lexer.consume(Token('r'));
+      }
+      else{
+        printf("here bad var\n");
+        return parseError<VarDeclExprAST>("var", "in declaration");
+      }
+    }
+    printf("meet with var\n");  
     // TODO: check to see if this is a variable name(identifier)
     //       If not, report the error with 'parseError', otherwise eat the variable name
     /* 
@@ -196,6 +211,23 @@ private:
      *  Write your code here.
      *
      */
+    // if(lexer.getCurToken() == Token(' ')){
+    //   lexer.consume(Token(' '));
+    // }
+    printf("token: %d\t%c\n", (int)(lexer.getCurToken()), char(lexer.getCurToken()));
+    lexer.consume(tok_var);
+    // if(lexer.getCurToken() == Token(' ')){
+    //   lexer.consume(Token(' '));
+    // }
+    if(lexer.getCurToken() == tok_identifier){
+      id = lexer.getId().str();
+      printf("get id : %s\n", id.c_str());
+      lexer.consume(tok_identifier);
+    }
+    else{
+      printf("bad id %c\t%d\n", char(lexer.getCurToken()), (int)(lexer.getCurToken()));
+      return parseError<VarDeclExprAST>("identifier", "in declaration");
+    }
 
     std::unique_ptr<VarType> type; // Type is optional, it can be inferred
     // TODO: modify the code to additionally support the third method: var a[][] = ... 
@@ -203,6 +235,21 @@ private:
       type = parseType();
       if (!type)
         return nullptr;
+    }
+
+    if (lexer.getCurToken() == '[') {
+      type = parseType();
+      if (!type)
+        return nullptr;
+      // if(lexer.getCurToken() == '['){
+      //   type = parseType();
+      //   if (!type)
+      //     return nullptr;
+      // }
+      // else{
+      //   // printf("bad type %c\t%d\n", char(lexer.getCurToken()), (int)(lexer.getCurToken()));
+      //   return parseError<VarDeclExprAST>("type", "in declaration");
+      // }
     }
 
     if (!type)
@@ -217,28 +264,48 @@ private:
   /// shape_list ::= num | num , shape_list
   // TODO: make an extension to support the new type like var a[2][3] = [1, 2, 3, 4, 5, 6];
   std::unique_ptr<VarType> parseType() {
-    if (lexer.getCurToken() != '<')
-      return parseError<VarType>("<", "to begin type");
-    lexer.getNextToken(); // eat <
+    printf("parseType %c\n", lexer.getCurToken());
+    if (lexer.getCurToken() != '<' && lexer.getCurToken() != '[')
+      return parseError<VarType>("< or [", "to begin type");
+    // lexer.consume(lexer.getCurToken()); // eat < or [
+    // lexer.getNextToken(); // eat <
 
     auto type = std::make_unique<VarType>();
 
-    while (lexer.getCurToken() == tok_number) {
-      type->shape.push_back(lexer.getValue());
+    if(lexer.getCurToken() == '<'){
       lexer.getNextToken();
-      if (lexer.getCurToken() == ',')
+      while (lexer.getCurToken() == tok_number) {
+        type->shape.push_back(lexer.getValue());
         lexer.getNextToken();
+        if (lexer.getCurToken() == ',')
+          lexer.getNextToken();
+      }
+      if (lexer.getCurToken() != '>')
+        return parseError<VarType>(">", "to end type");
+      lexer.getNextToken(); // eat >
     }
 
-    if (lexer.getCurToken() != '>')
-      return parseError<VarType>(">", "to end type");
-    lexer.getNextToken(); // eat >
+    else if(lexer.getCurToken() == Token('[')){
+      lexer.getNextToken();
+      while (lexer.getCurToken() == tok_number) {
+        type->shape.push_back(lexer.getValue());
+        lexer.getNextToken();
+        if(lexer.getCurToken() != ']')
+          return parseError<VarType>("]", "to end type");
+        lexer.getNextToken();
+        if (lexer.getCurToken() == '[')
+          lexer.getNextToken();
+      }
+    }
+
+    printf("parseType end %c\n", lexer.getCurToken());
     return type;
   }
 
   /// Parse a return statement.
   /// return :== return ; | return expr ;
   std::unique_ptr<ReturnExprAST> parseReturn() {
+    // printf("parseReturn\n");
     auto loc = lexer.getLastLocation();
     lexer.consume(tok_return);
 
@@ -254,6 +321,7 @@ private:
 
   /// 解析函数内的表达式语句expression，其形式为：expression::= primary binop rhs
   std::unique_ptr<ExprAST> parseExpression() {
+    printf("parseExpression\n");
     /// 解析"="右边第一项：primary
     auto lhs = parsePrimary();
     if (!lhs)
@@ -270,13 +338,16 @@ private:
   ///   ::= parenexpr
   ///   ::= tensorliteral
   std::unique_ptr<ExprAST> parsePrimary() {
+    printf("parsePrimary\n");
     switch (lexer.getCurToken()) {
     default:
+      printf("error tok : %c\t%d\n", char(lexer.getCurToken()), (int)(lexer.getCurToken()));
       llvm::errs() << "unknown token '" << lexer.getCurToken()
                    << "' when expecting an expression\n";
       return nullptr;
     // 解析标识符与函数调用，并返回相应AST
     case tok_identifier:
+      printf("to get a id %s\n", lexer.getId().str().c_str());
       return parseIdentifierExpr();
     // 解析数字，并返回相应AST
     case tok_number:
@@ -303,16 +374,68 @@ private:
   //        4. 如果是函数调用，其参数列表中的参数可以通过parseExpression()逐个解析，并存放在std::vector<std::unique_ptr<ExprAST>>中。最终返回相应AST时，可以使用std::make_unique<CallExprAST>(...)；
   //        5. 如果是print，要确保其内部只有一个参数，如果有多个参数，要输出错误信息。最终返回相应AST时，可以使用std::make_unique<PrintExprAST>(...)。
   std::unique_ptr<ExprAST> parseIdentifierExpr() {
+    printf("parseIdentifierExpr\n");
     /* 
      *
      *  Write your code here.
      *
      */
+    if(lexer.getCurToken() == tok_identifier){
+      std::string id;
+      id = lexer.getId().str();
+      lexer.consume(tok_identifier);
+      printf("function id: %s\n", id.c_str());
+      if(lexer.getCurToken() == '('){
+        printf("it is a function\n");
+        lexer.consume(Token('('));
+        std::vector<std::unique_ptr<ExprAST>> args;
+        while(lexer.getCurToken() != ')'){
+          auto arg = parseExpression();
+          // if(!arg)
+          //   return nullptr;
+          args.push_back(std::move(arg));
+          if(lexer.getCurToken() == ',')
+            lexer.consume(Token(','));
+        }
+        if(lexer.getCurToken() != ')')
+          return parseError<ExprAST>(")", "to end function call");
+        lexer.consume(Token(')'));
+        // if(lexer.getCurToken() == Token(';'))
+        //   lexer.consume(Token(';'));
+        // if(lexer.getCurToken() == Token('}'))
+        //   lexer.consume(Token('}'));
+        if(id == std::string("print")){
+          printf("there is a print\n");
+          if(args.size() != 1){
+            printf("parseIdentifierExpr returns 1\n");
+            return parseError<ExprAST>("print", "only takes one argument");
+          }
+        }
+        // for(auto &arg : args){
+        //   printf("arg: %s\n", arg->);
+        // }
+        printf("parseIdentifierExpr returns 2\n");
+        return std::make_unique<CallExprAST>(std::move(lexer.getLastLocation()), std::move(id),std::move(args));
+      }
+      else if(lexer.getCurToken() == ';' || lexer.getCurToken() == '}' || lexer.getCurToken() == ',' || lexer.getCurToken() == ')' || lexer.getCurToken() == ']'){
+        printf("parseIdentifierExpr returns 3\n");
+        return std::make_unique<VariableExprAST>(std::move(lexer.getLastLocation()), std::move(id));
+      }
+      else{
+        printf("parseIdentifierExpr returns 4\n");
+        return parseError<ExprAST>("(", "to begin function call");
+      }
+    }
+    else{
+        printf("parseIdentifierExpr returns 5\n");
+      return parseError<ExprAST>("identifier", "in expression");
+    }
   }
 
   /// Parse a literal number.
   /// numberexpr ::= number
   std::unique_ptr<ExprAST> parseNumberExpr() {
+    printf("parseNumberExpr\n");
     auto loc = lexer.getLastLocation();
     auto result =
         std::make_unique<NumberExprAST>(std::move(loc), lexer.getValue());
@@ -338,6 +461,7 @@ private:
   /// tensorLiteral ::= [ literalList ] | number
   /// literalList ::= tensorLiteral | tensorLiteral, literalList
   std::unique_ptr<ExprAST> parseTensorLiteralExpr() {
+    printf("parseTensorLiteralExpr\n");
     auto loc = lexer.getLastLocation();
     lexer.consume(Token('['));
 
@@ -405,6 +529,7 @@ private:
 
   // Get the precedence of the pending binary operator token.
   int getTokPrecedence() {
+    printf("getTokPrecedence\n");
     if (!isascii(lexer.getCurToken()))
       return -1;
 
@@ -437,6 +562,47 @@ private:
      *  Write your code here.
      *
      */
+    printf("parseBinOpRHS\n");
+    printf("exprPrec: %d\n", exprPrec);  
+    printf("Bin %d\t%c\n", lexer.getCurToken(), lexer.getCurToken());
+    // assert(0);
+    // if(lexer.getCurToken() == Token(';')){
+    //   lexer.consume(Token(';'));
+    //   return lhs;
+    // }
+    // lexer.getNextToken();
+    // printf("Bin cur tok: %c\t%d\n", lexer.getCurToken(), lexer.getCurToken());
+    int _exprPrec = getTokPrecedence();
+    // meet with ')
+    if(_exprPrec == -1){
+      // if(lexer.getCurToken() == Token(')')){
+      //   lexer.consume(Token(')'));
+      // }
+      printf("Bin return 1\n");
+      return lhs;
+    }
+    lexer.getNextToken();
+    if(lexer.getNextToken() == Token('(')){
+      lexer.consume(Token('('));
+      auto _lhs = parsePrimary();
+      if(!_lhs){
+        return nullptr;
+      }
+      _lhs = parseBinOpRHS(0, std::move(_lhs));
+    }
+    if(_exprPrec >= exprPrec){
+      printf("here\n");
+      auto _lhs = parsePrimary();
+      if(!_lhs){
+        return nullptr;
+      }
+      _lhs = parseBinOpRHS(_exprPrec, std::move(_lhs));
+      lhs = std::move(_lhs);
+    }
+    return lhs;
+    // if(exprPrec == 0){
+    //   return lhs;
+    // }
   }
   
   /// Helper function to signal errors while parsing, it takes an argument
@@ -444,6 +610,7 @@ private:
   /// Location is retrieved from the lexer to enrich the error message.
   template <typename R, typename T, typename U = const char *>
   std::unique_ptr<R> parseError(T &&expected, U &&context = "") {
+    printf("parseError\n");
     auto curToken = lexer.getCurToken();
     llvm::errs() << "Parse error (" << lexer.getLastLocation().line << ", "
                  << lexer.getLastLocation().col << "): expected '" << expected
